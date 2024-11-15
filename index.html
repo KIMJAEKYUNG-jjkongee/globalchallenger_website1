@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech to Text</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        p { 
+            white-space: pre-wrap;
+        }
+        #lecture-content {
+            font-size: 16px;
+            background-color: #ffffff;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .highlight {
+            text-decoration: underline;
+            text-decoration-color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>Speech to Text Demo</h1>
+
+    <!-- 교수용 비밀번호 입력 -->
+    <label for="password">교수님 비밀번호: </label>
+    <input type="password" id="password">
+    <button onclick="enableButtons()">로그인</button>
+
+    <br><br>
+    <button id="start-btn" disabled>Start Speech Recognition</button>
+    <button id="stop-btn" disabled>Stop Speech Recognition</button>
+    
+    <div>
+        <label>텍스트 크기:</label>
+        <button onclick="adjustFontSize(2)">+</button>
+        <button onclick="adjustFontSize(-2)">-</button>
+    </div>
+    <div>
+        <label>배경색 변경:</label>
+        <button onclick="changeBackgroundColor('#f0f0f0')">밝은 회색</button>
+        <button onclick="changeBackgroundColor('#fffbcc')">밝은 노란색</button>
+        <button onclick="changeBackgroundColor('#dfffcc')">밝은 연두색</button>
+        <button onclick="changeBackgroundColor('#ccf2ff')">밝은 파란색</button>
+        <button onclick="changeBackgroundColor('#ffffff')">기본</button>
+    </div>
+
+    <div id="lecture-content" contenteditable="true"></div>
+    <button onclick="saveContent()">수동 저장</button>
+
+    <!-- 검색 기능 -->
+    <label for="search-input">텍스트 검색:</label>
+    <input type="text" id="search-input" placeholder="검색어 입력">
+    <button onclick="highlightSearch()">검색</button>
+    <button onclick="clearHighlight()">검색 초기화</button>
+
+    <script>
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const lectureContent = document.getElementById('lecture-content');
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        // 페이지 로드 시 저장된 내용 불러오기
+        window.onload = function() {
+            const savedContent = localStorage.getItem('lectureContent');
+            if (savedContent) {
+                lectureContent.innerHTML = savedContent;
+            }
+        };
+
+        // 강의 내용 자동 저장 함수
+        lectureContent.addEventListener('input', () => {
+            localStorage.setItem('lectureContent', lectureContent.innerHTML);
+        });
+
+        // 수동 저장 버튼 기능
+        function saveContent() {
+            localStorage.setItem('lectureContent', lectureContent.innerHTML);
+            alert('강의 내용이 저장되었습니다.');
+        }
+
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'ko-KR';
+            recognition.interimResults = true; // 중간 결과 활성화
+            recognition.maxAlternatives = 1;
+
+            let isRecognizing = false;
+
+            const restartRecognition = () => {
+                if (isRecognizing) {
+                    setTimeout(() => {
+                        recognition.start();
+                    }, 500);
+                }
+            };
+
+            recognition.onend = () => {
+                if (isRecognizing) {
+                    restartRecognition();
+                }
+            };
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                let finalTranscript = localStorage.getItem('lectureContent') || lectureContent.innerHTML;
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        let transcript = event.results[i][0].transcript.trim();
+                        finalTranscript += transcript + '.\n';
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+
+                // 최종 및 중간 결과 표시
+                lectureContent.innerHTML = `강의 내용:\n${finalTranscript}\n${interimTranscript}`;
+                lectureContent.scrollTop = lectureContent.scrollHeight; // 자동 스크롤
+
+                // 최종 텍스트를 Local Storage에 저장
+                localStorage.setItem('lectureContent', finalTranscript);
+            };
+
+            startBtn.addEventListener('click', () => {
+                isRecognizing = true;
+                recognition.start();
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            });
+
+            stopBtn.addEventListener('click', () => {
+                isRecognizing = false;
+                recognition.stop();
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            });
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                restartRecognition();
+            };
+        } else {
+            lectureContent.innerText = "Web Speech API is not supported in this browser.";
+        }
+
+        // 텍스트 크기 조정 함수
+        function adjustFontSize(sizeChange) {
+            let currentSize = parseInt(window.getComputedStyle(lectureContent).fontSize);
+            lectureContent.style.fontSize = (currentSize + sizeChange) + 'px';
+        }
+
+        // 배경색 변경 함수
+        function changeBackgroundColor(color) {
+            lectureContent.style.backgroundColor = color;
+        }
+
+        // 텍스트 검색 및 하이라이트 기능
+        function highlightSearch() {
+            const searchInput = document.getElementById('search-input').value;
+            const regex = new RegExp(`(${searchInput})`, 'gi');
+            const highlightedText = lectureContent.innerHTML.replace(regex, '<span class="highlight">$1</span>');
+            lectureContent.innerHTML = highlightedText;
+        }
+
+        // 검색 초기화 기능
+        function clearHighlight() {
+            lectureContent.innerHTML = localStorage.getItem('lectureContent') || '';
+            document.getElementById('search-input').value = '';
+        }
+
+        // 교수님 전용 버튼 활성화
+        function enableButtons() {
+            const password = document.getElementById('password').value;
+            if (password === '교수님비밀번호') { // 실제 사용 시 안전한 비밀번호로 설정할 것
+                startBtn.disabled = false;
+                stopBtn.disabled = false;
+                alert('버튼이 활성화되었습니다.');
+            } else {
+                alert('비밀번호가 틀렸습니다.');
+            }
+        }
+    </script>
+</body>
+</html>
